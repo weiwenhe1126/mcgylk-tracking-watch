@@ -2,7 +2,8 @@ name: Logistics Tracking On Demand
 
 on:
   schedule:
-    # 每 5 分钟检查一次收件箱（GitHub 支持的最短间隔）
+    # 每 5 分钟检查一次收件箱（GitHub 支持的最短间隔，UTC 计算）
+    # 注意：GitHub 定时器为尽力而为，高峰期可能延迟数分钟
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
