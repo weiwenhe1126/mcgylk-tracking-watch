@@ -32,4 +32,6 @@ jobs:
           MAIL_USER: ${{ secrets.MAIL_USER }}
           MAIL_AUTH: ${{ secrets.MAIL_AUTH }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
+          DING_WEBHOOK: ${{ secrets.DING_WEBHOOK }}
+          DING_SECRET: ${{ secrets.DING_SECRET }}
         run: python3 tracking.py

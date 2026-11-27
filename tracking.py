@@ -12,12 +12,17 @@
 """
 
 import email
+import base64
+import hashlib
+import hmac
 import imaplib
 import json
 import os
 import re
 import smtplib
 import sys
+import time
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header
@@ -196,6 +201,51 @@ def send_mail(subject, body):
     print(f"MAIL_SENT -> {to}")
 
 
+def notify_ding(title, lines):
+    """钉钉群机器人推送（加签）。未配置或失败时只打印，不影响回信。"""
+    hook = os.environ.get("DING_WEBHOOK", "").strip()
+    secret = os.environ.get("DING_SECRET", "").strip()
+    if not hook:
+        print("DING_SKIP: 未配置 DING_WEBHOOK")
+        return
+    try:
+        ts = str(int(time.time() * 1000))
+        digest = hmac.new(
+            secret.encode(), f"{ts}\n{secret}".encode(), hashlib.sha256
+        ).digest()
+        sign = urllib.parse.quote_plus(base64.b64encode(digest).decode())
+        text = f"### {title}\n\n" + "\n\n".join(lines)
+        payload = json.dumps(
+            {"msgtype": "markdown", "markdown": {"title": title, "text": text}}
+        ).encode()
+        req = urllib.request.Request(
+            f"{hook}&timestamp={ts}&sign={sign}",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode("utf-8", "ignore"))
+        print(f"DING_SENT errcode={result.get('errcode')} errmsg={result.get('errmsg')}")
+    except Exception as exc:
+        print(f"DING_ERROR {exc}")
+
+
+def ding_lines(items):
+    out = []
+    for number, ship in items:
+        if not ship:
+            out.append(f"- {number}：查询不到（可能单号有误或未入系统）")
+            continue
+        st = ship.get("status", "")
+        out.append(
+            f"- {number}：**{STATUS_MAP.get(st, st)}**　"
+            f"{ship.get('country', '-')} / {ship.get('parcel_count', '-')} 件"
+        )
+    out.append("")
+    out.append("[打开查询入口](http://mcgylk.nextsls.com/tracking/app#/tracking)")
+    return out
+
+
 def main():
     dry = "--dry-run" in sys.argv
     user = os.environ.get("MAIL_USER", "").strip()
@@ -242,6 +292,7 @@ def main():
         print("DRY_RUN: 未发信")
         return
     send_mail(subject, body)
+    notify_ding(subject, ding_lines(items))
     save_state({"last_uid": max_uid})
 
 
