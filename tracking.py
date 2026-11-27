@@ -201,8 +201,13 @@ def send_mail(subject, body):
     print(f"MAIL_SENT -> {to}")
 
 
-def notify_ding(title, lines):
-    """钉钉群机器人推送（加签）。未配置或失败时只打印，不影响回信。"""
+def ding_markdown(body):
+    """邮件正文 -> 钉钉 markdown：内容与邮件一致，仅按钉钉要求改用空行分段。"""
+    return "\n\n".join(line.strip() for line in body.splitlines() if line.strip())
+
+
+def notify_ding(title, body):
+    """钉钉群机器人推送（加签），正文与邮件保持一致。未配置或失败时只打印，不影响回信。"""
     hook = os.environ.get("DING_WEBHOOK", "").strip()
     secret = os.environ.get("DING_SECRET", "").strip()
     if not hook:
@@ -214,7 +219,7 @@ def notify_ding(title, lines):
             secret.encode(), f"{ts}\n{secret}".encode(), hashlib.sha256
         ).digest()
         sign = urllib.parse.quote_plus(base64.b64encode(digest).decode())
-        text = f"### {title}\n\n" + "\n\n".join(lines)
+        text = f"### {title}\n\n" + ding_markdown(body)
         payload = json.dumps(
             {"msgtype": "markdown", "markdown": {"title": title, "text": text}}
         ).encode()
@@ -228,22 +233,6 @@ def notify_ding(title, lines):
         print(f"DING_SENT errcode={result.get('errcode')} errmsg={result.get('errmsg')}")
     except Exception as exc:
         print(f"DING_ERROR {exc}")
-
-
-def ding_lines(items):
-    out = []
-    for number, ship in items:
-        if not ship:
-            out.append(f"- {number}：查询不到（可能单号有误或未入系统）")
-            continue
-        st = ship.get("status", "")
-        out.append(
-            f"- {number}：**{STATUS_MAP.get(st, st)}**　"
-            f"{ship.get('country', '-')} / {ship.get('parcel_count', '-')} 件"
-        )
-    out.append("")
-    out.append("[打开查询入口](http://mcgylk.nextsls.com/tracking/app#/tracking)")
-    return out
 
 
 def main():
@@ -292,7 +281,7 @@ def main():
         print("DRY_RUN: 未发信")
         return
     send_mail(subject, body)
-    notify_ding(subject, ding_lines(items))
+    notify_ding(subject, body)
     save_state({"last_uid": max_uid})
 
 
